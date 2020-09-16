@@ -226,7 +226,7 @@ class Quantizer:
             if node.name in observed_node_names_set:
                 continue
 
-            get_new_observer_name = get_new_attr_name_with_prefix('activation_post_process_')
+            prefix = node.name + '_activation_post_process_'
             root_node, _, obj, qconfig = matches.get(node.name, (None, None, None, None))
             if root_node is None:
                 env[node.name] = observed_graph.node_copy(node, load_arg)
@@ -234,6 +234,7 @@ class Quantizer:
                 env[node.name] = observed_graph.node_copy(node, load_arg)
 
                 def insert_observer(node, observer, device):
+                    get_new_observer_name = get_new_attr_name_with_prefix(prefix)
                     observer_name = get_new_observer_name(model)
                     setattr(model, observer_name, observer)
                     self.activation_post_process_map[node.name] = observer
@@ -274,6 +275,7 @@ class Quantizer:
                 env[node.name] = observed_graph.node_copy(node, load_arg)
 
             if node.name not in observed_node_names_set and node.name in quants:
+                get_new_observer_name = get_new_attr_name_with_prefix(prefix)
                 observer_name = get_new_observer_name(model)
                 _, qconfig, is_weight = quants[node.name]
                 if qconfig is not None:
@@ -463,7 +465,7 @@ class Quantizer:
 
             # handle activation post process calls
             if node.op == 'call_module':
-                if node.target.split('.')[-1].startswith('activation_post_process_'):
+                if '_activation_post_process_' in node.target.split('.')[-1]:
                     observer_module = self.modules[node.target]
                     prev_node = node.args[0]
                     if observer_module.dtype == torch.float16:
@@ -497,7 +499,7 @@ class Quantizer:
             return map_arg(a, lambda node: env[node.name])
         for node in self.quantized_graph.nodes:
             if node.op == 'call_module' and \
-               node.target.split('.')[-1].startswith('activation_post_process_'):
+               '_activation_post_process_' in node.target.split('.')[-1]:
                 # remove activation post process
                 env[node.name] = env[node.args[0].name]
             else:
@@ -506,7 +508,7 @@ class Quantizer:
 
         to_be_removed = []
         for name, _ in model.named_modules():
-            if name.split('.')[-1].startswith('activation_post_process_'):
+            if '_activation_post_process_' in name.split('.')[-1]:
                 to_be_removed.append(name)
         for n in to_be_removed:
             delattr(model, n)
